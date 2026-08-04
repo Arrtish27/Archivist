@@ -10,15 +10,19 @@ export type CardType =
   | 'attack'
   | 'item'
   | 'weapon'
-  | 'domain';
+  | 'domain'
+  | (string & {});
 
 export type DeckCard = {
+  id?: string;
   cardUuid: string;
+  editionUuid?: string | null;
   name: string;
   section: DeckSection;
   quantity: number;
   types: CardType[];
   level?: number;
+  sortOrder?: number | null;
 };
 
 export type Deck = {
@@ -26,6 +30,11 @@ export type Deck = {
   name: string;
   formatId: string;
   cards: DeckCard[];
+  championIdentityCardUuid?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  archivedAt?: string | null;
 };
 
 export type DeckValidationIssue = {
