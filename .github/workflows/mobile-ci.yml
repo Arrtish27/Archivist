@@ -1,0 +1,86 @@
+name: Mobile CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - phase-*
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: EAS build profile
+        required: true
+        default: development
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+
+jobs:
+  checks:
+    name: Typecheck, lint, and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Expo config
+        run: npm run mobile:config
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+  eas-build:
+    name: EAS ${{ matrix.platform }} build
+    if: github.event_name == 'workflow_dispatch'
+    needs: checks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - android
+          - ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install --global eas-cli@21.5.0
+
+      - name: Start EAS build
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >
+          eas build
+          --profile ${{ inputs.build_profile }}
+          --platform ${{ matrix.platform }}
+          --non-interactive
+          --no-wait

@@ -10,6 +10,7 @@ Useful commands from the repository root:
 npm run mobile:start
 npm run mobile:android
 npm run mobile:ios
+npm run mobile:config
 npm run typecheck
 npm run lint
 npm run test
@@ -19,3 +20,14 @@ npm run eas:build:production
 ```
 
 The app is local-first. Account sync and collection mode are feature-flagged off until the Part 1 decklist workflow is stable.
+
+Phase 02 uses Expo Continuous Native Generation through config plugins. Do not commit generated `android` or `ios` directories unless the project intentionally changes native-directory policy.
+
+The scanner proof of concept requires an Expo development build because it uses native camera and OCR dependencies:
+
+```text
+npm run mobile:android
+npm run mobile:ios
+```
+
+Expo Go is still useful for simple UI checks, but it is not the target runtime for scanner work.

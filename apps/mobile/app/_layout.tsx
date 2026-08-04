@@ -21,7 +21,25 @@ export default function RootLayout() {
         <Stack.Screen
           name="index"
           options={{
-            title: 'Grand Archive Companion',
+            title: 'Deck Workspace',
+          }}
+        />
+        <Stack.Screen
+          name="scanner"
+          options={{
+            title: 'Scanner POC',
+          }}
+        />
+        <Stack.Screen
+          name="export"
+          options={{
+            title: 'Export',
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
           }}
         />
       </Stack>
