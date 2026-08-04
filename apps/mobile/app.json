@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Grand Archive Companion",
+    "slug": "grand-archive-companion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "grandarchivecompanion",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.publisher.grandarchivecompanion",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Grand Archive Companion uses the camera to scan cards into decklists."
+      }
+    },
+    "android": {
+      "package": "com.publisher.grandarchivecompanion",
+      "permissions": ["CAMERA"],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": ["expo-router", "expo-sqlite"],
+    "extra": {
+      "grandArchiveApiBaseUrl": "https://api.gatcg.com",
+      "catalogSyncBatchSize": 100,
+      "scannerConfidenceThresholds": {
+        "exactFooterAutoAdd": 0.92,
+        "nameOnlyConfirmation": 0.85
+      },
+      "features": {
+        "collectionMode": false,
+        "cloudSync": false
+      }
+    }
+  }
+}

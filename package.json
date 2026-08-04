@@ -1,0 +1,28 @@
+{
+  "name": "archivist",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/mobile"
+  ],
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "mobile:start": "npm --workspace apps/mobile run start",
+    "mobile:start:go": "npm --workspace apps/mobile run start:go",
+    "mobile:android": "npm --workspace apps/mobile run android",
+    "mobile:ios": "npm --workspace apps/mobile run ios",
+    "mobile:web": "npm --workspace apps/mobile run web",
+    "typecheck": "npm --workspace apps/mobile run typecheck",
+    "lint": "npm --workspace apps/mobile run lint",
+    "test": "npm --workspace apps/mobile run test",
+    "format": "npm --workspace apps/mobile run format",
+    "format:check": "npm --workspace apps/mobile run format:check",
+    "eas:build:development": "npm --workspace apps/mobile run eas:build:development",
+    "eas:build:preview": "npm --workspace apps/mobile run eas:build:preview",
+    "eas:build:production": "npm --workspace apps/mobile run eas:build:production"
+  },
+  "allowScripts": {}
+}

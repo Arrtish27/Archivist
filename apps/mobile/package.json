@@ -1,0 +1,51 @@
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "expo": "~57.0.10",
+    "expo-clipboard": "^57.0.1",
+    "expo-constants": "^57.0.9",
+    "expo-dev-client": "^57.0.10",
+    "expo-haptics": "^57.0.1",
+    "expo-linking": "^57.0.4",
+    "expo-router": "^57.0.9",
+    "expo-sharing": "^57.0.8",
+    "expo-sqlite": "^57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "^5.8.0",
+    "react-native-screens": "^4.26.2",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/react": "~19.2.2",
+    "es-abstract": "^1.24.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.1",
+    "prettier": "^3.9.6",
+    "resolve": "^1.22.12",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "scripts": {
+    "start": "expo start --dev-client",
+    "start:go": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eas:build:development": "eas build --profile development --platform all",
+    "eas:build:preview": "eas build --profile preview --platform all",
+    "eas:build:production": "eas build --profile production --platform all"
+  },
+  "private": true
+}
