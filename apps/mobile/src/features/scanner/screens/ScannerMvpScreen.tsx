@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 
-import { useAppServices } from '@/app/AppServicesProvider';
+import { useAppServices } from '@/application/AppServicesProvider';
 import { CatalogCard } from '@/data/catalog/types';
 import { ScanCandidate } from '@/domain/card-resolution/types';
 import { DeckSection } from '@/domain/validation/types';

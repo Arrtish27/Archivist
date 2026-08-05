@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useAppServices } from '@/app/AppServicesProvider';
+import { useAppServices } from '@/application/AppServicesProvider';
 import { featureFlags } from '@/features/settings/featureFlags';
 import { theme } from '@/ui/theme';
 

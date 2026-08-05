@@ -9,5 +9,5 @@
     },
     "types": ["node"]
   },
-  "include": ["app", "src", "expo-env.d.ts", "*.config.*", "*.test.ts"]
+  "include": ["app", "src", "*.config.*", "*.test.ts"]
 }

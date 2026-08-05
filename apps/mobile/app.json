@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Grand Archive Companion",
-    "slug": "grand-archive-companion",
+    "slug": "archivist-grand-archive",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,7 +24,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -46,7 +47,7 @@
           "android": {
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
-            "minSdkVersion": 23,
+            "minSdkVersion": 24,
             "buildToolsVersion": "36.0.0"
           },
           "ios": {
@@ -65,7 +66,12 @@
       "features": {
         "collectionMode": false,
         "cloudSync": false
+      },
+      "router": {},
+      "eas": {
+        "projectId": "abcdceb1-0677-4d30-bdc5-ba499b5eb52c"
       }
-    }
+    },
+    "owner": "godemperors-team"
   }
 }

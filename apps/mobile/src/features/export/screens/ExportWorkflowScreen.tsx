@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useAppServices } from '@/app/AppServicesProvider';
+import { useAppServices } from '@/application/AppServicesProvider';
 import { DeckSnapshot } from '@/data/decks/DeckService';
 import { DeckExportFormat, DeckExportScope } from '@/domain/deck-export/types';
 import { standardConstructedRulePack } from '@/domain/validation/standard-constructed';
