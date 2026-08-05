@@ -347,7 +347,7 @@ export function ScannerMvpScreen() {
         actionLabel="Allow Camera"
         message="Camera access is optional"
         onAction={requestPermission}
-        supportingText="Manual deck entry and local search stay available if camera access is denied."
+        supportingText="Manual deck entry and card search stay available if camera access is denied."
       />
     );
   }
@@ -672,7 +672,7 @@ function DecisionPanel({
         </>
       ) : null}
       {decision.status === 'no_match' ? (
-        <Text style={styles.panelText}>Use local search below.</Text>
+        <Text style={styles.panelText}>Use manual search below.</Text>
       ) : null}
       {decision.status === 'duplicate_ignored' ? (
         <Text style={styles.panelText}>
@@ -742,7 +742,7 @@ function ManualSearchPanel({
         autoCapitalize="none"
         autoCorrect={false}
         onChangeText={onQueryChange}
-        placeholder="Search local catalog"
+        placeholder="Search cards"
         placeholderTextColor={theme.colors.muted}
         style={styles.searchInput}
         value={query}
@@ -752,7 +752,7 @@ function ManualSearchPanel({
       ) : null}
       {isLoading ? <Text style={styles.panelText}>Searching</Text> : null}
       {query.trim().length >= 2 && !isLoading && results.length === 0 ? (
-        <Text style={styles.panelText}>No local matches.</Text>
+        <Text style={styles.panelText}>No matches.</Text>
       ) : null}
       {results.map((card) => (
         <View key={card.uuid} style={styles.searchResultRow}>

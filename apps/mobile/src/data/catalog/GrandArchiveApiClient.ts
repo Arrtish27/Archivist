@@ -62,12 +62,16 @@ export type GrandArchiveCardsPage = {
 };
 
 type CardsSearchResponse = {
+  cards?: GrandArchiveCard[];
   data?: GrandArchiveCard[];
   has_more?: boolean;
+  paginated_cards_count?: number;
   page?: number;
   page_size?: number;
+  results?: GrandArchiveCard[];
   total_cards?: number;
   total_pages?: number;
+  value?: GrandArchiveCard[];
 };
 
 type WrappedValueResponse<T> = {
@@ -78,17 +82,20 @@ type WrappedValueResponse<T> = {
 export type GrandArchiveApiClientOptions = {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
   userAgent?: string;
 };
 
 export class GrandArchiveApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
   private readonly userAgent: string;
 
   constructor(options: GrandArchiveApiClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? syncConfig.apiBaseUrl;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? 6000;
     this.userAgent = options.userAgent ?? 'Archivist/0.1 Phase01CatalogSync';
   }
 
@@ -109,18 +116,26 @@ export class GrandArchiveApiClient {
     page: number;
     pageSize?: number;
   }): Promise<GrandArchiveCardsPage> {
-    const response = await this.get<CardsSearchResponse>('/cards/search', {
-      page: String(page),
-      page_size: String(pageSize),
-    });
+    const response = await this.get<CardsSearchResponse | GrandArchiveCard[]>(
+      '/cards/search',
+      {
+        page: String(page),
+        page_size: String(pageSize),
+      },
+    );
+    const data = extractGrandArchiveCards(response);
+    const responseRecord = isRecord(response) ? response : {};
 
     return {
-      data: response.data ?? [],
-      hasMore: Boolean(response.has_more),
-      page: response.page ?? page,
-      pageSize: response.page_size ?? pageSize,
-      totalCards: response.total_cards ?? response.data?.length ?? 0,
-      totalPages: response.total_pages ?? page,
+      data,
+      hasMore: Boolean(responseRecord.has_more),
+      page: toNumber(responseRecord.page) ?? page,
+      pageSize: toNumber(responseRecord.page_size) ?? pageSize,
+      totalCards:
+        toNumber(responseRecord.total_cards) ??
+        toNumber(responseRecord.paginated_cards_count) ??
+        data.length,
+      totalPages: toNumber(responseRecord.total_pages) ?? page,
     };
   }
 
@@ -137,12 +152,32 @@ export class GrandArchiveApiClient {
   }
 
   async fetchAutocomplete(name: string) {
-    const response = await this.get<WrappedValueResponse<GrandArchiveCard>>(
-      '/cards/autocomplete',
-      { name },
+    const response = await this.get<
+      WrappedValueResponse<GrandArchiveCard> | GrandArchiveCard[]
+    >('/cards/autocomplete', { name });
+
+    return extractGrandArchiveCards(response);
+  }
+
+  async searchCardsByName({
+    name,
+    page = 1,
+    pageSize = 20,
+  }: {
+    name: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const response = await this.get<CardsSearchResponse | GrandArchiveCard[]>(
+      '/cards/search',
+      {
+        name,
+        page: String(page),
+        page_size: String(pageSize),
+      },
     );
 
-    return response.value ?? [];
+    return extractGrandArchiveCards(response);
   }
 
   private async get<T>(path: string, params: Record<string, string> = {}) {
@@ -152,12 +187,30 @@ export class GrandArchiveApiClient {
       url.searchParams.set(key, value);
     }
 
-    const response = await this.fetchImpl(url.toString(), {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': this.userAgent,
-      },
-    });
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), this.timeoutMs);
+
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(url.toString(), {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': this.userAgent,
+        },
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        throw new Error(
+          `Grand Archive API request timed out after ${this.timeoutMs}ms`,
+        );
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       throw new Error(
@@ -167,4 +220,48 @@ export class GrandArchiveApiClient {
 
     return (await response.json()) as T;
   }
+}
+
+function extractGrandArchiveCards(response: unknown): GrandArchiveCard[] {
+  if (Array.isArray(response)) {
+    return response.filter(isGrandArchiveCard);
+  }
+
+  if (!isRecord(response)) {
+    return [];
+  }
+
+  for (const key of ['data', 'value', 'cards', 'results'] as const) {
+    const value = response[key];
+
+    if (Array.isArray(value)) {
+      return value.filter(isGrandArchiveCard);
+    }
+  }
+
+  return [];
+}
+
+function isGrandArchiveCard(value: unknown): value is GrandArchiveCard {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.name === 'string' &&
+    typeof value.slug === 'string' &&
+    typeof value.uuid === 'string'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  return null;
 }

@@ -893,7 +893,7 @@ function SearchAddPanel({
       ) : null}
       {isLoading ? <ActivityIndicator color={theme.colors.accent} /> : null}
       {query.trim().length >= 2 && !isLoading && results.length === 0 ? (
-        <Text style={styles.panelText}>No local matches.</Text>
+        <Text style={styles.panelText}>No matches.</Text>
       ) : null}
       {results.map((card) => (
         <View key={card.uuid} style={styles.searchResultRow}>

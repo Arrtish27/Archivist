@@ -1,5 +1,4 @@
 import { CatalogRepository } from '@/data/catalog/CatalogRepository';
-import { GrandArchiveApiClient } from '@/data/catalog/GrandArchiveApiClient';
 import { mapGrandArchiveCard } from '@/data/catalog/mapGrandArchiveCard';
 import { CatalogCard } from '@/data/catalog/types';
 import {
@@ -17,6 +16,15 @@ const FUZZY_NAME_CONFIDENCE_FLOOR = 0.62;
 const MAX_SCAN_CANDIDATES = 5;
 const MAX_API_QUERIES = 4;
 
+type GrandArchiveLookupClient = {
+  fetchAutocomplete(name: string): Promise<unknown[]>;
+  searchCardsByName?: (input: {
+    name: string;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<unknown[]>;
+};
+
 export type CardResolver = {
   resolveText(text: OcrCardText): Promise<ScanCandidate[]>;
 };
@@ -25,7 +33,7 @@ export class OfflineCardResolver implements CardResolver {
   constructor(
     private readonly catalogRepository: CatalogRepository,
     private readonly options: {
-      apiClient?: Pick<GrandArchiveApiClient, 'fetchAutocomplete'>;
+      apiClient?: GrandArchiveLookupClient;
     } = {},
   ) {}
 
@@ -38,6 +46,8 @@ export class OfflineCardResolver implements CardResolver {
 
     const queries = buildResolverQueries(text);
     const candidatesByUuid = new Map<string, CandidateAccumulator>();
+    const apiStatus = await this.addApiCandidates(queries, candidatesByUuid);
+    const offlineReasons = getOfflineFallbackReasons(apiStatus);
 
     for (const query of queries) {
       const exactName = await this.catalogRepository.getCardByNormalizedName(
@@ -47,7 +57,8 @@ export class OfflineCardResolver implements CardResolver {
       if (exactName) {
         mergeCandidate(candidatesByUuid, exactName, {
           confidence: EXACT_NAME_CONFIDENCE,
-          reasons: ['exact_name', ...query.reasons],
+          preferCard: apiStatus !== 'result',
+          reasons: ['exact_name', ...offlineReasons, ...query.reasons],
           query: query.normalized,
         });
       }
@@ -63,13 +74,17 @@ export class OfflineCardResolver implements CardResolver {
 
         mergeCandidate(candidatesByUuid, match, {
           confidence: score,
-          reasons: ['fuzzy_name', 'search_fallback', ...query.reasons],
+          preferCard: apiStatus !== 'result',
+          reasons: [
+            'fuzzy_name',
+            'search_fallback',
+            ...offlineReasons,
+            ...query.reasons,
+          ],
           query: query.normalized,
         });
       }
     }
-
-    await this.addApiCandidates(queries, candidatesByUuid);
 
     return [...candidatesByUuid.values()]
       .map(toScanCandidate)
@@ -136,23 +151,34 @@ export class OfflineCardResolver implements CardResolver {
   private async addApiCandidates(
     queries: ResolverQuery[],
     candidatesByUuid: Map<string, CandidateAccumulator>,
-  ) {
+  ): Promise<ApiLookupStatus> {
     const apiClient = this.options.apiClient;
 
     if (!apiClient) {
-      return;
+      return 'unavailable';
     }
+
+    let sawApiResult = false;
+    let sawApiEmpty = false;
 
     try {
       for (const query of queries.slice(0, MAX_API_QUERIES)) {
-        const cards = (await apiClient.fetchAutocomplete(query.text)).map(
-          mapGrandArchiveCard,
+        const response = apiClient.searchCardsByName
+          ? await apiClient.searchCardsByName({
+              name: query.text,
+              pageSize: MAX_SCAN_CANDIDATES,
+            })
+          : await apiClient.fetchAutocomplete(query.text);
+        const cards = response.map((card) =>
+          mapGrandArchiveCard(card as GrandArchiveApiCard),
         );
 
         if (cards.length === 0) {
+          sawApiEmpty = true;
           continue;
         }
 
+        sawApiResult = true;
         await this.catalogRepository.upsertCards(cards);
 
         for (const card of cards) {
@@ -163,7 +189,10 @@ export class OfflineCardResolver implements CardResolver {
 
           mergeCandidate(candidatesByUuid, card, {
             confidence: Math.min(0.89, score),
+            preferCard: true,
             reasons: [
+              'online_query',
+              'online_result',
               'grand_archive_query',
               'grand_archive_result',
               ...query.reasons,
@@ -173,10 +202,20 @@ export class OfflineCardResolver implements CardResolver {
         }
       }
     } catch {
-      return;
+      return 'unavailable';
     }
+
+    if (sawApiResult) {
+      return 'result';
+    }
+
+    return sawApiEmpty ? 'empty' : 'skipped';
   }
 }
+
+type GrandArchiveApiCard = Parameters<typeof mapGrandArchiveCard>[0];
+
+type ApiLookupStatus = 'empty' | 'result' | 'skipped' | 'unavailable';
 
 type ResolverQuery = {
   normalized: string;
@@ -237,6 +276,7 @@ function mergeCandidate(
   card: CatalogCard,
   input: {
     confidence: number;
+    preferCard?: boolean;
     query: string;
     reasons: string[];
   },
@@ -253,7 +293,9 @@ function mergeCandidate(
     return;
   }
 
-  existing.card = card;
+  if (input.preferCard) {
+    existing.card = card;
+  }
   existing.confidence = Math.max(existing.confidence, input.confidence);
   existing.matchedQueries.add(input.query);
 
@@ -380,4 +422,21 @@ function parseNullableNumber(value: string | null | undefined) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getOfflineFallbackReasons(apiStatus: ApiLookupStatus) {
+  switch (apiStatus) {
+    case 'empty':
+      return ['online_query', 'grand_archive_empty', 'offline_fallback'];
+    case 'skipped':
+      return ['offline_fallback'];
+    case 'unavailable':
+      return [
+        'online_unavailable',
+        'grand_archive_unavailable',
+        'offline_fallback',
+      ];
+    case 'result':
+      return [];
+  }
 }
