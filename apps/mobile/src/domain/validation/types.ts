@@ -21,7 +21,23 @@ export type DeckCard = {
   section: DeckSection;
   quantity: number;
   types: CardType[];
+  subtypes?: string[];
+  classes?: string[];
+  elements?: string[];
   level?: number;
+  costType?: string | null;
+  costValue?: string | null;
+  power?: string | null;
+  life?: string | null;
+  durability?: string | null;
+  speed?: string | null;
+  effectRaw?: string | null;
+  flavor?: string | null;
+  editionSetPrefix?: string | null;
+  editionCollectorNumber?: string | null;
+  editionImagePath?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   sortOrder?: number | null;
 };
 

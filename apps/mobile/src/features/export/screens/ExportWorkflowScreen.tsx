@@ -1,17 +1,19 @@
 import * as Clipboard from 'expo-clipboard';
+import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAppServices } from '@/app/AppServicesProvider';
-import { DeckExportRow } from '@/domain/deck-export/types';
-import { Deck } from '@/domain/validation/types';
+import { mapDeckToExportRows } from '@/features/deck-builder/DeckBuilderModel';
 import { exportService } from '@/features/export/ExportService';
 import { theme } from '@/ui/theme';
 
 export function ExportWorkflowScreen() {
   const services = useAppServices();
+  const routeParams = useLocalSearchParams();
+  const requestedDeckId = getStringRouteParam(routeParams.deckId);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>(
     'idle',
   );
@@ -19,7 +21,10 @@ export function ExportWorkflowScreen() {
     queryFn: () => services.decks.listDecks(),
     queryKey: ['decks'],
   });
-  const deck = decksQuery.data?.[0] ?? null;
+  const deck =
+    (requestedDeckId
+      ? decksQuery.data?.find((item) => item.id === requestedDeckId)
+      : decksQuery.data?.[0]) ?? null;
   const rows = useMemo(() => mapDeckToExportRows(deck), [deck]);
   const exportText = useMemo(
     () => exportService.format(rows, 'plainText'),
@@ -78,14 +83,8 @@ export function ExportWorkflowScreen() {
   );
 }
 
-function mapDeckToExportRows(deck: Deck | null): DeckExportRow[] {
-  return (
-    deck?.cards.map((card) => ({
-      cardName: card.name,
-      quantity: card.quantity,
-      section: card.section,
-    })) ?? []
-  );
+function getStringRouteParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 const styles = StyleSheet.create({

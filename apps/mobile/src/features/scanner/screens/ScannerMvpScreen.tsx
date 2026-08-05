@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -64,11 +65,16 @@ const deckSections: {
 export function ScannerMvpScreen() {
   const services = useAppServices();
   const queryClient = useQueryClient();
+  const routeParams = useLocalSearchParams();
+  const requestedDeckId = getStringRouteParam(routeParams.deckId);
+  const requestedSection = getDeckSectionRouteParam(routeParams.section);
   const cameraRef = useRef<CameraView>(null);
   const scannerSessionRef = useRef(createScannerSession());
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
-  const [targetSection, setTargetSection] = useState<DeckSection>('main');
+  const [targetSection, setTargetSection] = useState<DeckSection>(
+    requestedSection ?? 'main',
+  );
   const [quantity, setQuantity] = useState(1);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('deck');
   const [batchRunning, setBatchRunning] = useState(false);
@@ -89,7 +95,10 @@ export function ScannerMvpScreen() {
     queryFn: () => services.decks.listDecks(),
     queryKey: ['decks'],
   });
-  const activeDeck = decksQuery.data?.[0] ?? null;
+  const activeDeck =
+    (requestedDeckId
+      ? decksQuery.data?.find((deck) => deck.id === requestedDeckId)
+      : decksQuery.data?.[0]) ?? null;
   const manualSearchQuery = useQuery({
     enabled: searchQuery.trim().length >= 2,
     queryFn: () =>
@@ -447,6 +456,22 @@ export function ScannerMvpScreen() {
       <StatusBar style="light" />
     </ScrollView>
   );
+}
+
+function getStringRouteParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getDeckSectionRouteParam(
+  value: string | string[] | undefined,
+): DeckSection | null {
+  const section = getStringRouteParam(value);
+
+  if (section === 'main' || section === 'material' || section === 'sideboard') {
+    return section;
+  }
+
+  return null;
 }
 
 function SectionSelector({

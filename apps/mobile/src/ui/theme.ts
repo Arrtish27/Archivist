@@ -1,12 +1,12 @@
 export const theme = {
   colors: {
     accent: '#276b61',
-    background: '#f6f3ed',
-    border: '#d8d1c4',
-    danger: '#9f2f2f',
-    muted: '#625f5a',
-    surface: '#fffdf8',
-    text: '#1d2526',
-    warning: '#a86718',
+    background: '#f4f7f9',
+    border: '#d6dee6',
+    danger: '#a33737',
+    muted: '#64717d',
+    surface: '#ffffff',
+    text: '#172026',
+    warning: '#9a6610',
   },
 } as const;

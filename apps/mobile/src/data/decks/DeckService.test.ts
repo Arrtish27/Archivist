@@ -124,6 +124,94 @@ describe('SqliteDeckService', () => {
 
     await db.close?.();
   });
+
+  it('merges moved cards and restores tournament snapshots', async () => {
+    const db = await createSqlJsTestDatabase();
+    const repository = new CatalogRepository(db);
+    const deckService = new SqliteDeckService(db, predictableIds());
+
+    await repository.initialize();
+    await repository.upsertCards([creativeShockCard, apotheosisRiteCard]);
+
+    const deck = await deckService.createDeck({ name: 'Snapshot Deck' });
+    await deckService.upsertDeckCard({
+      cardUuid: creativeShockCard.uuid,
+      deckId: deck.id,
+      quantity: 2,
+      section: 'main',
+    });
+    await deckService.upsertDeckCard({
+      cardUuid: apotheosisRiteCard.uuid,
+      deckId: deck.id,
+      quantity: 1,
+      section: 'sideboard',
+    });
+
+    const snapshot = await deckService.createSnapshot({
+      deckId: deck.id,
+      exportText: 'saved list',
+      label: 'Locals',
+    });
+
+    await deckService.upsertDeckCard({
+      cardUuid: creativeShockCard.uuid,
+      deckId: deck.id,
+      quantity: 1,
+      section: 'sideboard',
+    });
+
+    const deckWithSideCard = await deckService.getDeck(deck.id);
+    const sideCard = deckWithSideCard?.cards.find(
+      (card) =>
+        card.cardUuid === creativeShockCard.uuid &&
+        card.section === 'sideboard',
+    );
+
+    expect(sideCard?.id).toBeTruthy();
+    await deckService.moveDeckCard(sideCard?.id ?? '', 'main');
+
+    const movedDeck = await deckService.getDeck(deck.id);
+    expect(
+      movedDeck?.cards.find(
+        (card) =>
+          card.cardUuid === creativeShockCard.uuid && card.section === 'main',
+      )?.quantity,
+    ).toBe(3);
+    expect(
+      movedDeck?.cards.find(
+        (card) =>
+          card.cardUuid === creativeShockCard.uuid &&
+          card.section === 'sideboard',
+      ),
+    ).toBeUndefined();
+
+    const restoredDeck = await deckService.restoreSnapshot(snapshot.id);
+
+    expect(
+      restoredDeck.cards.find(
+        (card) =>
+          card.cardUuid === creativeShockCard.uuid && card.section === 'main',
+      )?.quantity,
+    ).toBe(2);
+    expect(restoredDeck.cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cardUuid: apotheosisRiteCard.uuid,
+          quantity: 1,
+          section: 'sideboard',
+        }),
+      ]),
+    );
+    expect(
+      restoredDeck.cards.find(
+        (card) =>
+          card.cardUuid === creativeShockCard.uuid &&
+          card.section === 'sideboard',
+      ),
+    ).toBeUndefined();
+
+    await db.close?.();
+  });
 });
 
 function predictableIds() {

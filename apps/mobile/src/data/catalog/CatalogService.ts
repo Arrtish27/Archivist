@@ -17,6 +17,7 @@ export type CatalogService = {
   initialize(): Promise<void>;
   getSyncStatus(): Promise<CatalogSyncState>;
   sync(options?: CatalogSyncOptions): Promise<CatalogSyncResult>;
+  getCard(cardUuid: string): Promise<CatalogCard | null>;
   searchCards(filters?: CatalogCardSearchFilters): Promise<CatalogCard[]>;
   resolveEdition(
     setPrefix: string,
@@ -39,6 +40,9 @@ export function createCatalogService({
     },
     async initialize() {
       await repository.initialize();
+    },
+    async getCard(cardUuid) {
+      return repository.getCardByUuid(cardUuid);
     },
     async resolveEdition(setPrefix, collectorNumber) {
       return repository.resolveEditionBySetCollector(

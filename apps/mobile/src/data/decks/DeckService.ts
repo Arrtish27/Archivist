@@ -56,6 +56,7 @@ export type DeckService = {
   }): Promise<DeckSnapshot>;
   getSnapshot(snapshotId: string): Promise<DeckSnapshot | null>;
   listSnapshots(deckId: string): Promise<DeckSnapshot[]>;
+  restoreSnapshot(snapshotId: string): Promise<Deck>;
 };
 
 type DeckRow = {
@@ -77,7 +78,20 @@ type DeckCardRow = {
   quantity: number;
   sort_order: number | null;
   card_name: string;
+  card_cost_type: string | null;
+  card_cost_value: string | null;
   card_level: string | null;
+  card_power: string | null;
+  card_life: string | null;
+  card_durability: string | null;
+  card_speed: string | null;
+  card_effect_raw: string | null;
+  card_flavor: string | null;
+  edition_set_prefix: string | null;
+  edition_collector_number: string | null;
+  edition_image_path: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type SnapshotRow = {
@@ -255,6 +269,7 @@ export class SqliteDeckService implements DeckService {
           existing.id,
         ],
       );
+      await this.touchDeck(input.deckId, now);
 
       return this.requireDeck(input.deckId);
     }
@@ -306,16 +321,47 @@ export class SqliteDeckService implements DeckService {
   }
 
   async moveDeckCard(deckCardId: string, section: DeckSection) {
-    const existing = await this.db.getFirst<{ deck_id: string }>(
-      'SELECT deck_id FROM deck_cards WHERE id = ?',
-      [deckCardId],
-    );
+    const existing = await this.db.getFirst<{
+      id: string;
+      deck_id: string;
+      section: DeckSection;
+      card_uuid: string;
+      edition_uuid: string | null;
+      quantity: number;
+      sort_order: number | null;
+    }>('SELECT * FROM deck_cards WHERE id = ?', [deckCardId]);
 
     if (!existing) {
       return;
     }
 
+    if (existing.section === section) {
+      return;
+    }
+
     const now = new Date().toISOString();
+    const target = await this.findExistingDeckCard({
+      cardUuid: existing.card_uuid,
+      deckId: existing.deck_id,
+      editionUuid: existing.edition_uuid,
+      section,
+    });
+
+    if (target && target.id !== existing.id) {
+      await this.db.execute(
+        `
+          UPDATE deck_cards
+          SET quantity = quantity + ?, updated_at = ?
+          WHERE id = ?
+        `,
+        [existing.quantity, now, target.id],
+      );
+      await this.db.execute('DELETE FROM deck_cards WHERE id = ?', [
+        existing.id,
+      ]);
+      await this.touchDeck(existing.deck_id, now);
+      return;
+    }
 
     await this.db.execute(
       `
@@ -391,6 +437,74 @@ export class SqliteDeckService implements DeckService {
     return rows.map(mapSnapshotRow);
   }
 
+  async restoreSnapshot(snapshotId: string) {
+    const snapshot = await this.getSnapshot(snapshotId);
+
+    if (!snapshot) {
+      throw new Error(`Snapshot not found: ${snapshotId}`);
+    }
+
+    await this.requireDeck(snapshot.deckId);
+
+    return this.db.withTransaction(async () => {
+      const now = new Date().toISOString();
+
+      await this.db.execute(
+        `
+          UPDATE decks
+          SET
+            format_id = ?,
+            champion_identity_card_uuid = ?,
+            notes = ?,
+            updated_at = ?
+          WHERE id = ?
+        `,
+        [
+          snapshot.deck.formatId,
+          snapshot.deck.championIdentityCardUuid ?? null,
+          snapshot.deck.notes ?? null,
+          now,
+          snapshot.deckId,
+        ],
+      );
+      await this.db.execute('DELETE FROM deck_cards WHERE deck_id = ?', [
+        snapshot.deckId,
+      ]);
+
+      for (const card of snapshot.deck.cards) {
+        await this.db.execute(
+          `
+            INSERT INTO deck_cards (
+              id,
+              deck_id,
+              section,
+              card_uuid,
+              edition_uuid,
+              quantity,
+              sort_order,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            this.createId('deck_card'),
+            snapshot.deckId,
+            card.section,
+            card.cardUuid,
+            card.editionUuid ?? null,
+            card.quantity,
+            card.sortOrder ?? null,
+            now,
+            now,
+          ],
+        );
+      }
+
+      return this.requireDeck(snapshot.deckId);
+    });
+  }
+
   private async requireDeck(deckId: string) {
     const deck = await this.getDeck(deckId);
 
@@ -425,10 +539,24 @@ export class SqliteDeckService implements DeckService {
           dc.section,
           dc.quantity,
           dc.sort_order,
+          dc.created_at,
+          dc.updated_at,
           c.name AS card_name,
-          c.level AS card_level
+          c.cost_type AS card_cost_type,
+          c.cost_value AS card_cost_value,
+          c.level AS card_level,
+          c.power AS card_power,
+          c.life AS card_life,
+          c.durability AS card_durability,
+          c.speed AS card_speed,
+          c.effect_raw AS card_effect_raw,
+          c.flavor AS card_flavor,
+          e.set_prefix AS edition_set_prefix,
+          e.collector_number AS edition_collector_number,
+          e.image_path AS edition_image_path
         FROM deck_cards dc
         INNER JOIN cards c ON c.uuid = dc.card_uuid
+        LEFT JOIN editions e ON e.uuid = dc.edition_uuid
         WHERE dc.deck_id = ?
         ORDER BY
           CASE dc.section
@@ -442,22 +570,62 @@ export class SqliteDeckService implements DeckService {
       [deckId],
     );
 
-    const typeMap = await this.loadCardTypes(rows.map((row) => row.card_uuid));
+    const relationMaps = await this.loadCardRelationMaps(
+      rows.map((row) => row.card_uuid),
+    );
 
     return rows.map((row) => ({
       cardUuid: row.card_uuid,
+      classes: relationMaps.classes.get(row.card_uuid) ?? [],
+      costType: row.card_cost_type,
+      costValue: row.card_cost_value,
+      createdAt: row.created_at,
+      durability: row.card_durability,
+      editionCollectorNumber: row.edition_collector_number,
+      editionImagePath: row.edition_image_path,
+      editionSetPrefix: row.edition_set_prefix,
       editionUuid: row.edition_uuid,
+      effectRaw: row.card_effect_raw,
+      elements: relationMaps.elements.get(row.card_uuid) ?? [],
+      flavor: row.card_flavor,
       id: row.id,
       level: parseNullableNumber(row.card_level),
+      life: row.card_life,
       name: row.card_name,
+      power: row.card_power,
       quantity: row.quantity,
       section: row.section,
+      speed: row.card_speed,
       sortOrder: row.sort_order,
-      types: (typeMap.get(row.card_uuid) ?? []) as CardType[],
+      subtypes: relationMaps.subtypes.get(row.card_uuid) ?? [],
+      types: (relationMaps.types.get(row.card_uuid) ?? []) as CardType[],
+      updatedAt: row.updated_at,
     }));
   }
 
-  private async loadCardTypes(cardUuids: string[]) {
+  private async loadCardRelationMaps(cardUuids: string[]) {
+    return {
+      classes: await this.loadCardRelation('card_classes', 'class', cardUuids),
+      elements: await this.loadCardRelation(
+        'card_elements',
+        'element',
+        cardUuids,
+      ),
+      subtypes: await this.loadCardRelation(
+        'card_subtypes',
+        'subtype',
+        cardUuids,
+      ),
+      types: await this.loadCardRelation('card_types', 'type', cardUuids),
+    };
+  }
+
+  private async loadCardRelation(
+    tableName:
+      'card_types' | 'card_subtypes' | 'card_classes' | 'card_elements',
+    columnName: 'type' | 'subtype' | 'class' | 'element',
+    cardUuids: string[],
+  ) {
     const map = new Map<string, string[]>();
 
     if (cardUuids.length === 0) {
@@ -467,8 +635,8 @@ export class SqliteDeckService implements DeckService {
     const placeholders = cardUuids.map(() => '?').join(', ');
     const rows = await this.db.getAll<{ card_uuid: string; type: string }>(
       `
-        SELECT card_uuid, type
-        FROM card_types
+        SELECT card_uuid, ${columnName} AS type
+        FROM ${tableName}
         WHERE card_uuid IN (${placeholders})
         ORDER BY type ASC
       `,

@@ -38,3 +38,11 @@ Phase 03 scanner behavior now lives behind app-owned services:
 - `ScannerService` converts OCR output into offline card candidates.
 - `ScannerSession` enforces confidence thresholds, confirmation, stable reads, duplicate prevention, and debug logs.
 - `ScannerDeckWorkflow` adds cards to the selected deck section and restores the previous deck state on undo.
+
+Phase 04 completes the local deck-builder workflow:
+
+- Decks can be created, renamed, duplicated, archived, and selected from the home screen.
+- Cards can be searched from the offline catalog, added by section and quantity, edited, moved, removed, sorted, and inspected.
+- Standard Constructed validation, section counts, sideboard points, and issue jump targets update from local deck state.
+- Tournament snapshots can be saved, compared against the active deck, restored, and copied for export.
+- Scanner and export routes accept deck context from the deck builder.
