@@ -2,6 +2,8 @@ import { DeckSection } from '../validation/types';
 
 export type DeckExportFormat = 'plainText' | 'countPrefix' | 'csv' | 'json';
 
+export type DeckExportScope = 'full' | DeckSection;
+
 export type DeckExportRow = {
   section: DeckSection;
   quantity: number;

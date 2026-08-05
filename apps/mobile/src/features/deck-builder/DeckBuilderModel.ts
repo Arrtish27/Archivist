@@ -33,7 +33,12 @@ export type ValidationSummary = {
 };
 
 export type DeckSnapshotDiff = {
+  cardName?: string;
+  fromSection?: DeckSection;
   label: string;
+  quantity?: number;
+  section?: DeckSection;
+  toSection?: DeckSection;
   type: 'added' | 'changed' | 'moved' | 'removed';
 };
 
@@ -213,19 +218,37 @@ export function compareDecks(
     const before = snapshotCards.get(key);
     const after = currentCards.get(key);
 
-    if (!before && after) {
-      diffs.push({
-        label: `+${after.quantity} ${after.name} in ${getSectionTitle(after.section)}`,
-        type: 'added',
-      });
+    if (!before && after?.total) {
+      for (const section of deckSectionOrder) {
+        const quantity = after.sections.get(section) ?? 0;
+
+        if (quantity > 0) {
+          diffs.push({
+            cardName: after.name,
+            label: `+${quantity} ${after.name} in ${getSectionTitle(section)}`,
+            quantity,
+            section,
+            type: 'added',
+          });
+        }
+      }
       continue;
     }
 
-    if (before && !after) {
-      diffs.push({
-        label: `-${before.quantity} ${before.name} from ${getSectionTitle(before.section)}`,
-        type: 'removed',
-      });
+    if (before?.total && !after) {
+      for (const section of deckSectionOrder) {
+        const quantity = before.sections.get(section) ?? 0;
+
+        if (quantity > 0) {
+          diffs.push({
+            cardName: before.name,
+            label: `-${quantity} ${before.name} from ${getSectionTitle(section)}`,
+            quantity,
+            section,
+            type: 'removed',
+          });
+        }
+      }
       continue;
     }
 
@@ -233,21 +256,86 @@ export function compareDecks(
       continue;
     }
 
-    if (before.section !== after.section) {
-      diffs.push({
-        label: `${after.name} moved ${getSectionTitle(
-          before.section,
-        )} to ${getSectionTitle(after.section)}`,
-        type: 'moved',
-      });
+    const deltas = new Map<DeckSection, number>();
+
+    for (const section of deckSectionOrder) {
+      const delta =
+        (after.sections.get(section) ?? 0) -
+        (before.sections.get(section) ?? 0);
+
+      if (delta !== 0) {
+        deltas.set(section, delta);
+      }
     }
 
-    if (before.quantity !== after.quantity) {
-      const delta = after.quantity - before.quantity;
+    const removedSections = deckSectionOrder.filter(
+      (section) => (deltas.get(section) ?? 0) < 0,
+    );
+    const addedSections = deckSectionOrder.filter(
+      (section) => (deltas.get(section) ?? 0) > 0,
+    );
+
+    for (const fromSection of removedSections) {
+      for (const toSection of addedSections) {
+        const removedQuantity = Math.abs(deltas.get(fromSection) ?? 0);
+        const addedQuantity = deltas.get(toSection) ?? 0;
+        const movedQuantity = Math.min(removedQuantity, addedQuantity);
+
+        if (movedQuantity <= 0) {
+          continue;
+        }
+
+        deltas.set(fromSection, (deltas.get(fromSection) ?? 0) + movedQuantity);
+        deltas.set(toSection, (deltas.get(toSection) ?? 0) - movedQuantity);
+        diffs.push({
+          cardName: after.name,
+          fromSection,
+          label: `${formatCompareQuantity(movedQuantity)}${after.name} moved ${getSectionTitle(
+            fromSection,
+          )} to ${getSectionTitle(toSection)}`,
+          quantity: movedQuantity,
+          toSection,
+          type: 'moved',
+        });
+      }
+    }
+
+    for (const section of deckSectionOrder) {
+      const delta = deltas.get(section) ?? 0;
+
+      if (delta === 0) {
+        continue;
+      }
+
+      if ((before.sections.get(section) ?? 0) === 0 && delta > 0) {
+        diffs.push({
+          cardName: after.name,
+          label: `+${delta} ${after.name} in ${getSectionTitle(section)}`,
+          quantity: delta,
+          section,
+          type: 'added',
+        });
+        continue;
+      }
+
+      if ((after.sections.get(section) ?? 0) === 0 && delta < 0) {
+        diffs.push({
+          cardName: before.name,
+          label: `${delta} ${before.name} from ${getSectionTitle(section)}`,
+          quantity: Math.abs(delta),
+          section,
+          type: 'removed',
+        });
+        continue;
+      }
+
       diffs.push({
+        cardName: after.name,
         label: `${delta > 0 ? '+' : ''}${delta} ${after.name} in ${getSectionTitle(
-          after.section,
+          section,
         )}`,
+        quantity: Math.abs(delta),
+        section,
         type: 'changed',
       });
     }
@@ -395,8 +483,8 @@ function groupCardsForCompare(cards: DeckCard[]) {
     string,
     {
       name: string;
-      quantity: number;
-      section: DeckSection;
+      sections: Map<DeckSection, number>;
+      total: number;
     }
   >();
 
@@ -407,13 +495,17 @@ function groupCardsForCompare(cards: DeckCard[]) {
     if (!current) {
       map.set(key, {
         name: card.name,
-        quantity: card.quantity,
-        section: card.section,
+        sections: new Map([[card.section, card.quantity]]),
+        total: card.quantity,
       });
       continue;
     }
 
-    current.quantity += card.quantity;
+    current.sections.set(
+      card.section,
+      (current.sections.get(card.section) ?? 0) + card.quantity,
+    );
+    current.total += card.quantity;
   }
 
   return map;
@@ -426,8 +518,8 @@ function countSeverity(issues: DeckValidationIssue[], severity: RuleSeverity) {
 function compareDefault(left: DeckCard, right: DeckCard, section: DeckSection) {
   if (section === 'material') {
     return (
-      compareNumber(left.level ?? 999, right.level ?? 999) ||
       compareType(left, right) ||
+      compareNumber(left.level ?? 999, right.level ?? 999) ||
       compareName(left, right)
     );
   }
@@ -496,4 +588,8 @@ function firstFacet(values?: string[]) {
 
 function isMaterialCard(card: DeckCard) {
   return card.types.includes('champion') || card.types.includes('regalia');
+}
+
+function formatCompareQuantity(quantity: number) {
+  return quantity === 1 ? '' : `${quantity} `;
 }

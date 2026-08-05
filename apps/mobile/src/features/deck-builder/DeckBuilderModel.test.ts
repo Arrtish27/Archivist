@@ -71,6 +71,44 @@ describe('DeckBuilderModel', () => {
     ]);
   });
 
+  it('sorts material exports by card role, then level and name', () => {
+    const sorted = sortDeckCards(
+      [
+        {
+          cardUuid: 'regalia',
+          name: 'Apotheosis Rite',
+          quantity: 1,
+          section: 'material',
+          types: ['regalia'],
+        },
+        {
+          cardUuid: 'champion-1',
+          level: 1,
+          name: 'Lorraine, Level 1',
+          quantity: 1,
+          section: 'material',
+          types: ['champion'],
+        },
+        {
+          cardUuid: 'champion-0',
+          level: 0,
+          name: 'Lorraine',
+          quantity: 1,
+          section: 'material',
+          types: ['champion'],
+        },
+      ],
+      'material',
+      'default',
+    );
+
+    expect(sorted.map((card) => card.name)).toEqual([
+      'Lorraine',
+      'Lorraine, Level 1',
+      'Apotheosis Rite',
+    ]);
+  });
+
   it('maps sorted deck cards into export rows by section', () => {
     const rows = mapDeckToExportRows(deck);
 
@@ -107,8 +145,8 @@ describe('DeckBuilderModel', () => {
 
     expect(compareDecks(deck, current).map((diff) => diff.label)).toEqual(
       expect.arrayContaining([
-        'Creative Shock moved Main to Sideboard',
-        '-1 Creative Shock in Sideboard',
+        '3 Creative Shock moved Main to Sideboard',
+        '-1 Creative Shock from Main',
         '-1 Apotheosis Rite from Sideboard',
         '-2 Brave Squire from Main',
       ]),

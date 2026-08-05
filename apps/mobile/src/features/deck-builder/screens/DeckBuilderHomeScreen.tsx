@@ -350,7 +350,7 @@ export function DeckBuilderHomeScreen() {
     try {
       await Clipboard.setStringAsync(exportText);
       setCopyState({
-        message: `Copied ${snapshot.label}.`,
+        message: `Copied ${countExportLines(exportText)} lines from ${snapshot.label}.`,
         status: 'copied',
       });
     } catch {
@@ -503,7 +503,7 @@ export function DeckBuilderHomeScreen() {
                   }
                 />
                 <SecondaryButton
-                  label="Copy"
+                  label={`Copy ${getSectionShortTitle(activeSection)}`}
                   onPress={() => void copyExport('plainText', activeSection)}
                 />
               </View>
@@ -679,7 +679,7 @@ function DeckListPanel({
               </Text>
             </View>
             <View style={styles.rowActions}>
-              <TinyButton label="Copy" onPress={() => onDuplicate(deck)} />
+              <TinyButton label="Duplicate" onPress={() => onDuplicate(deck)} />
               <TinyButton label="Archive" onPress={() => onArchive(deck)} />
             </View>
           </Pressable>

@@ -1,13 +1,113 @@
-import { DeckExportFormat, DeckExportRow } from '@/domain/deck-export/types';
+import {
+  DeckExportFormat,
+  DeckExportRow,
+  DeckExportScope,
+} from '@/domain/deck-export/types';
 import { DeckSection } from '@/domain/validation/types';
 
 export type ExportService = {
+  buildPayload(input: BuildExportPayloadInput): DeckExportPayload;
   format(rows: DeckExportRow[], format: DeckExportFormat): string;
 };
+
+export type BuildExportPayloadInput = {
+  deckName: string;
+  format: DeckExportFormat;
+  rows: DeckExportRow[];
+  scope?: DeckExportScope;
+  sourceLabel?: string;
+};
+
+export type DeckExportPayload = {
+  filename: string;
+  format: DeckExportFormat;
+  lineCount: number;
+  mimeType: string;
+  scope: DeckExportScope;
+  text: string;
+  title: string;
+  uti: string;
+};
+
+export type ExportFileSystem = {
+  cacheDirectory: string | null;
+  makeDirectoryAsync: (
+    fileUri: string,
+    options?: { intermediates?: boolean },
+  ) => Promise<void>;
+  writeAsStringAsync: (fileUri: string, contents: string) => Promise<void>;
+};
+
+export const exportFormatOptions: {
+  fileExtension: string;
+  format: DeckExportFormat;
+  label: string;
+  mimeType: string;
+  uti: string;
+}[] = [
+  {
+    fileExtension: 'txt',
+    format: 'plainText',
+    label: 'Plain Text',
+    mimeType: 'text/plain',
+    uti: 'public.plain-text',
+  },
+  {
+    fileExtension: 'txt',
+    format: 'countPrefix',
+    label: 'Count Prefix',
+    mimeType: 'text/plain',
+    uti: 'public.plain-text',
+  },
+  {
+    fileExtension: 'csv',
+    format: 'csv',
+    label: 'CSV',
+    mimeType: 'text/csv',
+    uti: 'public.comma-separated-values-text',
+  },
+  {
+    fileExtension: 'json',
+    format: 'json',
+    label: 'JSON',
+    mimeType: 'application/json',
+    uti: 'public.json',
+  },
+];
 
 const sectionOrder: DeckSection[] = ['material', 'main', 'sideboard'];
 
 export const exportService: ExportService = {
+  buildPayload(input) {
+    const metadata = getExportFormatMetadata(input.format);
+    const scope = input.scope ?? 'full';
+    const text = this.format(input.rows, input.format);
+    const title = [
+      input.deckName,
+      input.sourceLabel,
+      getScopeExportTitle(scope),
+      metadata.label,
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+    return {
+      filename: buildExportFilename({
+        deckName: input.deckName,
+        extension: metadata.fileExtension,
+        format: input.format,
+        scope,
+        sourceLabel: input.sourceLabel,
+      }),
+      format: input.format,
+      lineCount: countExportLines(text),
+      mimeType: metadata.mimeType,
+      scope,
+      text,
+      title,
+      uti: metadata.uti,
+    };
+  },
   format(rows, format) {
     switch (format) {
       case 'countPrefix':
@@ -21,6 +121,42 @@ export const exportService: ExportService = {
     }
   },
 };
+
+export async function writeExportPayloadToCache(
+  payload: DeckExportPayload,
+  fileSystem: ExportFileSystem,
+) {
+  if (!fileSystem.cacheDirectory) {
+    throw new Error('Export cache directory is unavailable.');
+  }
+
+  const exportDirectory = `${fileSystem.cacheDirectory}deck-exports/`;
+  const uri = `${exportDirectory}${payload.filename}`;
+
+  await fileSystem.makeDirectoryAsync(exportDirectory, { intermediates: true });
+  await fileSystem.writeAsStringAsync(uri, payload.text);
+
+  return uri;
+}
+
+export function getExportFormatMetadata(format: DeckExportFormat) {
+  return (
+    exportFormatOptions.find((option) => option.format === format) ??
+    exportFormatOptions[0]
+  );
+}
+
+export function getScopeExportTitle(scope: DeckExportScope) {
+  if (scope === 'full') {
+    return 'Full Deck';
+  }
+
+  return getSectionExportTitle(scope);
+}
+
+export function countExportLines(value: string) {
+  return value.split('\n').filter((line) => line.trim().length > 0).length;
+}
 
 function formatPlainText(rows: DeckExportRow[]) {
   return sectionOrder
@@ -99,4 +235,35 @@ function escapeCsv(value: string) {
   }
 
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function buildExportFilename({
+  deckName,
+  extension,
+  format,
+  scope,
+  sourceLabel,
+}: {
+  deckName: string;
+  extension: string;
+  format: DeckExportFormat;
+  scope: DeckExportScope;
+  sourceLabel?: string;
+}) {
+  const formatSuffix =
+    format === 'plainText' ? '' : getExportFormatMetadata(format).label;
+  const parts = [
+    deckName,
+    sourceLabel,
+    getScopeExportTitle(scope),
+    formatSuffix,
+  ].filter(Boolean);
+  const slug = parts
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+
+  return `${slug || 'deck-export'}.${extension}`;
 }

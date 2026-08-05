@@ -46,3 +46,11 @@ Phase 04 completes the local deck-builder workflow:
 - Standard Constructed validation, section counts, sideboard points, and issue jump targets update from local deck state.
 - Tournament snapshots can be saved, compared against the active deck, restored, and copied for export.
 - Scanner and export routes accept deck context from the deck builder.
+
+Phase 05 completes the export workflow:
+
+- Exports can target the full deck or a single section in plain text, count-prefix text, CSV, or JSON.
+- Export payloads include filenames, MIME metadata, line counts, and native share metadata.
+- CSV and JSON exports can be written to the Expo cache directory and shared as files.
+- Snapshot exports can be selected as sources and compared against the active deck or other snapshots.
+- Deck-builder copy labels and snapshot copy messages now match the export scope.
