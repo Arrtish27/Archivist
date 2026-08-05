@@ -38,7 +38,9 @@ export class OfflineCardResolver implements CardResolver {
     if (exactName) {
       return [
         {
+          cardLevel: parseNullableNumber(exactName.level),
           cardName: exactName.name,
+          cardTypes: exactName.types,
           cardUuid: exactName.uuid,
           confidence: EXACT_NAME_CONFIDENCE,
           reason: ['exact_name'],
@@ -54,7 +56,9 @@ export class OfflineCardResolver implements CardResolver {
         const score = scoreNameMatch(normalizedName, candidate.normalizedName);
 
         return {
+          cardLevel: parseNullableNumber(candidate.level),
           cardName: candidate.name,
+          cardTypes: candidate.types,
           cardUuid: candidate.uuid,
           confidence: score,
           reason: ['fuzzy_name'],
@@ -111,7 +115,9 @@ export class OfflineCardResolver implements CardResolver {
     }
 
     return {
+      cardLevel: parseNullableNumber(match.card.level),
       cardName: match.card.name,
+      cardTypes: match.card.types,
       cardUuid: match.card.uuid,
       collectorNumber: match.edition.collectorNumber,
       confidence: EXACT_FOOTER_CONFIDENCE,
@@ -211,4 +217,13 @@ function levenshteinDistance(left: string, right: string) {
   }
 
   return previous[right.length];
+}
+
+function parseNullableNumber(value: string | null | undefined) {
+  if (value === null || value === undefined || value.trim() === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

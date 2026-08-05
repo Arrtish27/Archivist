@@ -2,6 +2,8 @@ export type ScanCandidate = {
   cardUuid: string;
   editionUuid?: string;
   cardName?: string;
+  cardLevel?: number;
+  cardTypes?: string[];
   confidence: number;
   requiresConfirmation?: boolean;
   reason: string[];

@@ -23,7 +23,7 @@ The app is local-first. Account sync and collection mode are feature-flagged off
 
 Phase 02 uses Expo Continuous Native Generation through config plugins. Do not commit generated `android` or `ios` directories unless the project intentionally changes native-directory policy.
 
-The scanner proof of concept requires an Expo development build because it uses native camera and OCR dependencies:
+The scanner MVP requires an Expo development build because it uses native camera and OCR dependencies:
 
 ```text
 npm run mobile:android
@@ -31,3 +31,10 @@ npm run mobile:ios
 ```
 
 Expo Go is still useful for simple UI checks, but it is not the target runtime for scanner work.
+
+Phase 03 scanner behavior now lives behind app-owned services:
+
+- `NativeOcrService` wraps native OCR.
+- `ScannerService` converts OCR output into offline card candidates.
+- `ScannerSession` enforces confidence thresholds, confirmation, stable reads, duplicate prevention, and debug logs.
+- `ScannerDeckWorkflow` adds cards to the selected deck section and restores the previous deck state on undo.

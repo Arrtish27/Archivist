@@ -27,7 +27,7 @@ export default function RootLayout() {
         <Stack.Screen
           name="scanner"
           options={{
-            title: 'Scanner POC',
+            title: 'Scanner',
           }}
         />
         <Stack.Screen

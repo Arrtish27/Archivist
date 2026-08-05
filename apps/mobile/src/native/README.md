@@ -1,10 +1,10 @@
 # Native Modules
 
-Native scanner code should stay behind small TypeScript service boundaries. Add a local Expo module here only when the scanner proof of concept needs Swift or Kotlin.
+Native scanner code should stay behind small TypeScript service boundaries. Add a local Expo module here only if the scanner needs Swift or Kotlin beyond the current Expo module stack.
 
-## Phase 02 Scanner Proof Of Concept
+## Phase 03 Scanner MVP
 
-The current Phase 02 path uses Expo development builds with config plugins instead of committed `android` or `ios` directories.
+The current scanner path uses Expo development builds with config plugins instead of committed `android` or `ios` directories.
 
 Native scanner dependencies are isolated behind TypeScript services:
 
@@ -12,6 +12,8 @@ Native scanner dependencies are isolated behind TypeScript services:
 - `@infinitered/react-native-mlkit-text-recognition` processes captured still images.
 - `expo-image` is installed for the ML Kit Expo module peer dependency.
 - `src/features/scanner/NativeOcrService.ts` hides the native OCR package.
-- `src/features/scanner/ScannerService.ts` sends OCR text into the offline card resolver.
+- `src/features/scanner/ScannerService.ts` converts OCR output into resolver candidates.
+- `src/features/scanner/ScannerSession.ts` handles confidence gates, confirmation states, stable reads, duplicate prevention, and debug events.
+- `src/features/scanner/ScannerDeckWorkflow.ts` performs scanner/manual adds and one-tap undo through the deck service.
 
-This proof of concept intentionally does not mutate deck data. Scanner UI should produce candidates first; deck mutation belongs to the deck-builder workflow.
+Collection scanning remains deferred. Scanner events store text and candidate metadata only; raw camera images are not retained by default.

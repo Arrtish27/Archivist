@@ -1,3 +1,3 @@
-import { ScannerProofOfConceptScreen } from '../src/features/scanner/screens/ScannerProofOfConceptScreen';
+import { ScannerMvpScreen } from '../src/features/scanner/screens/ScannerMvpScreen';
 
-export default ScannerProofOfConceptScreen;
+export default ScannerMvpScreen;
