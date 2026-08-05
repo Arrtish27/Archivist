@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { type ReactNode, useMemo, useState } from 'react';
 import {
@@ -384,10 +384,16 @@ export function ExportWorkflowScreen() {
         </>
       ) : (
         <View style={styles.emptyPanel}>
-          <Text style={styles.panelTitle}>No Deck Selected</Text>
-          <Text style={styles.panelText}>
-            Create a deck from the workspace.
+          <Text style={styles.panelTitle}>
+            {decksQuery.isLoading ? 'Loading Deck' : 'Deck Not Found'}
           </Text>
+          <Text style={styles.panelText}>
+            Choose a saved deck or create a new one from the deck list.
+          </Text>
+          <PrimaryButton
+            label="Deck List"
+            onPress={() => router.replace('/decks')}
+          />
         </View>
       )}
 
@@ -788,7 +794,11 @@ function getScopeValue(
 }
 
 function selectActiveDeck(decks: Deck[], deckId: string | null) {
-  return decks.find((deck) => deck.id === deckId) ?? decks[0] ?? null;
+  if (deckId) {
+    return decks.find((deck) => deck.id === deckId) ?? null;
+  }
+
+  return decks[0] ?? null;
 }
 
 function getStringRouteParam(value: string | string[] | undefined) {

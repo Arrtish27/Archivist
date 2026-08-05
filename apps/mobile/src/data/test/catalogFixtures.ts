@@ -110,3 +110,18 @@ export const apotheosisRiteCard = makeFixtureCard({
   types: ['regalia', 'item'],
   uuid: 'card-apotheosis-rite',
 });
+
+export const guoJiaCard = makeFixtureCard({
+  classes: ['TAMER'],
+  collectorNumber: '007',
+  editionUuid: 'edition-guo-jia-alc-007',
+  elements: ['WIND'],
+  level: '3',
+  name: "Guo Jia, Heaven's Favored",
+  setName: 'Alchemical Revolution',
+  setPrefix: 'ALC',
+  slug: 'guo-jia-heavens-favored',
+  subtypes: ['HUMAN'],
+  types: ['champion'],
+  uuid: 'card-guo-jia',
+});

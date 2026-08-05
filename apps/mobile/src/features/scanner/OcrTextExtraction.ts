@@ -8,11 +8,18 @@ export function buildOcrCardText(result: StillImageOcrResult): OcrCardText {
   const lines = getReadableLines(result.lines);
   const footerText = getLikelyFooterText(lines, result.rawText);
   const explicitFooter = parseExplicitFooter(footerText);
+  const nameText = getLikelyNameText(lines, result.rawText);
+  const rawLines = result.rawText.split(/\r?\n/);
 
   return {
     collectorNumberText: explicitFooter?.collectorNumberText,
     footerText,
-    nameText: getLikelyNameText(lines, result.rawText),
+    nameCandidates: buildOcrNameCandidates([
+      nameText,
+      ...lines.map((line) => line.text),
+      ...rawLines,
+    ]),
+    nameText,
     setPrefixText: explicitFooter?.setPrefixText,
   };
 }
@@ -110,4 +117,69 @@ function parseExplicitFooter(value: string) {
     collectorNumberText: match[2],
     setPrefixText: match[1],
   };
+}
+
+export function buildOcrNameCandidates(values: readonly string[]) {
+  const candidates: string[] = [];
+
+  for (const value of values) {
+    const cleaned = cleanOcrNameCandidate(value);
+
+    if (!cleaned) {
+      continue;
+    }
+
+    candidates.push(cleaned);
+
+    const commaParts = cleaned.split(',');
+
+    if (commaParts.length > 1) {
+      candidates.push(commaParts.slice(1).join(',').trim());
+    }
+
+    if (/\blineage\b/i.test(cleaned)) {
+      candidates.push(cleaned.replace(/\blineage\b/gi, '').trim());
+    }
+  }
+
+  return uniqueCandidates(candidates).slice(0, 12);
+}
+
+function cleanOcrNameCandidate(value: string | null | undefined) {
+  const cleaned = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/^\s*(?:lv\.?|level)\s*[0-9oOIlS]*\s*/i, '')
+    .replace(/^\s*[0-9oOIlS]+\s+/, '')
+    .trim()
+    .replace(/^[^A-Za-z']+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (
+    !cleaned ||
+    cleaned.length < 3 ||
+    /^(?:cost|champion|tamer|on enter|level|lv\.?|thering)\b/i.test(cleaned)
+  ) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function uniqueCandidates(values: readonly string[]) {
+  const seen = new Set<string>();
+  const results: string[] = [];
+
+  for (const value of values) {
+    const key = value.toLowerCase();
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    results.push(value);
+  }
+
+  return results;
 }

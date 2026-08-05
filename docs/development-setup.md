@@ -35,17 +35,19 @@ Expo Go is still useful for simple UI checks, but it is not the target runtime f
 Phase 03 scanner behavior now lives behind app-owned services:
 
 - `NativeOcrService` wraps native OCR.
-- `ScannerService` converts OCR output into offline card candidates.
+- `ScannerService` converts OCR output into offline card candidates and can use Grand Archive autocomplete fallback for noisy OCR fragments.
 - `ScannerSession` enforces confidence thresholds, confirmation, stable reads, duplicate prevention, and debug logs.
 - `ScannerDeckWorkflow` adds cards to the selected deck section and restores the previous deck state on undo.
+- The scanner starts an automatic capture loop when camera permission, camera readiness, and deck context are available. `Pause Auto` stops the loop, and `Scan Now` remains available as a fallback.
 
 Phase 04 completes the local deck-builder workflow:
 
-- Decks can be created, renamed, duplicated, archived, and selected from the home screen.
+- The home screen opens to the deck list, and individual decks open in a dedicated editor route.
+- Decks can be created, renamed, duplicated, archived, and selected from the deck list.
 - Cards can be searched from the offline catalog, added by section and quantity, edited, moved, removed, sorted, and inspected.
 - Standard Constructed validation, section counts, sideboard points, and issue jump targets update from local deck state.
 - Tournament snapshots can be saved, compared against the active deck, restored, and copied for export.
-- Scanner and export routes accept deck context from the deck builder.
+- Scanner and export routes accept deck context from the deck editor.
 
 Phase 05 completes the export workflow:
 

@@ -1,3 +1,3 @@
-import { DeckBuilderHomeScreen } from '../src/features/deck-builder/screens/DeckBuilderHomeScreen';
+import { DeckListScreen } from '../src/features/deck-builder/screens/DeckListScreen';
 
-export default DeckBuilderHomeScreen;
+export default DeckListScreen;

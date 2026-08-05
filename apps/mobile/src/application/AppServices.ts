@@ -32,8 +32,9 @@ export function getAppServices() {
 async function createAppServices(): Promise<AppServices> {
   const database = await openAppDatabase();
   const catalogRepository = new CatalogRepository(database);
+  const apiClient = new GrandArchiveApiClient();
   const catalog = createCatalogService({
-    apiClient: new GrandArchiveApiClient(),
+    apiClient,
     repository: catalogRepository,
   });
   const decks = createDeckService(database);
@@ -45,7 +46,7 @@ async function createAppServices(): Promise<AppServices> {
     catalog,
     decks,
     ocr: createNativeOcrService(),
-    scanner: createOfflineScannerService(catalogRepository),
+    scanner: createOfflineScannerService(catalogRepository, apiClient),
   };
 }
 

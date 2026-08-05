@@ -13,6 +13,7 @@ export type ScanCandidate = {
 
 export type OcrCardText = {
   nameText?: string;
+  nameCandidates?: string[];
   footerText?: string;
   setPrefixText?: string;
   collectorNumberText?: string;

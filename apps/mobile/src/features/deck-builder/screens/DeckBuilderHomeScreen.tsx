@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import {
@@ -29,6 +29,7 @@ import {
 import {
   buildSnapshotLabel,
   compareDecks,
+  DEFAULT_DECK_SECTION,
   deckSectionMetadata,
   DeckSortMode,
   formatUpdatedAt,
@@ -73,10 +74,16 @@ const sortModes: {
 ];
 
 export function DeckBuilderHomeScreen() {
+  return <DeckEditorScreen />;
+}
+
+export function DeckEditorScreen() {
   const services = useAppServices();
   const queryClient = useQueryClient();
-  const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<DeckSection>('main');
+  const routeParams = useLocalSearchParams();
+  const requestedDeckId = getStringRouteParam(routeParams.deckId);
+  const [activeSection, setActiveSection] =
+    useState<DeckSection>(DEFAULT_DECK_SECTION);
   const [sortMode, setSortMode] = useState<DeckSortMode>('default');
   const [searchQuery, setSearchQuery] = useState('');
   const [addQuantity, setAddQuantity] = useState(1);
@@ -103,8 +110,8 @@ export function DeckBuilderHomeScreen() {
     queryKey: ['decks'],
   });
   const activeDeck = useMemo(
-    () => selectActiveDeck(decksQuery.data ?? [], selectedDeckId),
-    [decksQuery.data, selectedDeckId],
+    () => selectRouteDeck(decksQuery.data ?? [], requestedDeckId),
+    [decksQuery.data, requestedDeckId],
   );
   const validationIssues = useMemo(
     () => (activeDeck ? standardConstructedRulePack.validate(activeDeck) : []),
@@ -166,16 +173,6 @@ export function DeckBuilderHomeScreen() {
   const invalidateSnapshots = () =>
     queryClient.invalidateQueries({ queryKey: ['deck-snapshots'] });
 
-  const createDeckMutation = useMutation({
-    mutationFn: () =>
-      services.decks.createDeck({
-        name: `Tournament Deck ${(decksQuery.data?.length ?? 0) + 1}`,
-      }),
-    onSuccess: async (deck) => {
-      setSelectedDeckId(deck.id);
-      await invalidateDecks();
-    },
-  });
   const updateDeckMutation = useMutation({
     mutationFn: (input: { deckId: string; name: string }) =>
       services.decks.updateDeck(input.deckId, {
@@ -183,22 +180,11 @@ export function DeckBuilderHomeScreen() {
       }),
     onSuccess: invalidateDecks,
   });
-  const duplicateDeckMutation = useMutation({
-    mutationFn: (deck: Deck) =>
-      services.decks.duplicateDeck(deck.id, `${deck.name} Copy`),
-    onSuccess: async (deck) => {
-      setSelectedDeckId(deck.id);
-      await invalidateDecks();
-    },
-  });
   const archiveDeckMutation = useMutation({
     mutationFn: (deckId: string) => services.decks.archiveDeck(deckId),
-    onSuccess: async (deck) => {
-      if (selectedDeckId === deck.id) {
-        setSelectedDeckId(null);
-      }
-
+    onSuccess: async () => {
       await invalidateDecks();
+      router.replace('/decks');
     },
   });
   const writeCardMutation = useMutation({
@@ -246,9 +232,16 @@ export function DeckBuilderHomeScreen() {
     mutationFn: (snapshotId: string) =>
       services.decks.restoreSnapshot(snapshotId),
     onSuccess: async (deck) => {
-      setSelectedDeckId(deck.id);
       setSelectedCardId(null);
       await invalidateDecks();
+      if (deck.id !== requestedDeckId) {
+        router.replace({
+          pathname: '/decks/[deckId]',
+          params: {
+            deckId: deck.id,
+          },
+        });
+      }
     },
   });
 
@@ -422,17 +415,6 @@ export function DeckBuilderHomeScreen() {
         </Text>
       ) : null}
 
-      <DeckListPanel
-        activeDeckId={activeDeck?.id ?? null}
-        decks={decksQuery.data ?? []}
-        isCreating={createDeckMutation.isPending}
-        isLoading={decksQuery.isLoading}
-        onArchive={(deck) => archiveDeckMutation.mutate(deck.id)}
-        onCreate={() => createDeckMutation.mutate()}
-        onDuplicate={(deck) => duplicateDeckMutation.mutate(deck)}
-        onSelect={(deckId) => setSelectedDeckId(deckId)}
-      />
-
       {activeDeck ? (
         <>
           <View style={styles.panel}>
@@ -570,6 +552,10 @@ export function DeckBuilderHomeScreen() {
               onPress={() => void copyExport('plainText')}
             />
             <SecondaryButton
+              label="Decks"
+              onPress={() => router.push('/decks')}
+            />
+            <SecondaryButton
               label="Export"
               onPress={() =>
                 router.push({
@@ -580,14 +566,25 @@ export function DeckBuilderHomeScreen() {
                 })
               }
             />
+            <SecondaryButton
+              disabled={archiveDeckMutation.isPending}
+              label={archiveDeckMutation.isPending ? 'Archiving' : 'Archive'}
+              onPress={() => archiveDeckMutation.mutate(activeDeck.id)}
+            />
           </View>
         </>
       ) : (
         <View style={styles.emptyPanel}>
-          <Text style={styles.panelTitle}>No Deck Selected</Text>
-          <Text style={styles.panelText}>
-            Create a deck from the list above.
+          <Text style={styles.panelTitle}>
+            {decksQuery.isLoading ? 'Loading Deck' : 'Deck Not Found'}
           </Text>
+          <Text style={styles.panelText}>
+            Choose a saved deck or create a new one from the deck list.
+          </Text>
+          <PrimaryButton
+            label="Deck List"
+            onPress={() => router.replace('/decks')}
+          />
         </View>
       )}
 
@@ -617,7 +614,7 @@ export function DeckBuilderHomeScreen() {
   );
 }
 
-function DeckListPanel({
+export function DeckListPanel({
   activeDeckId,
   decks,
   isCreating,
@@ -1289,8 +1286,16 @@ function TinyButton({
   );
 }
 
-function selectActiveDeck(decks: Deck[], selectedDeckId: string | null) {
-  return decks.find((deck) => deck.id === selectedDeckId) ?? decks[0] ?? null;
+function selectRouteDeck(decks: Deck[], deckId: string | null | undefined) {
+  if (!deckId) {
+    return null;
+  }
+
+  return decks.find((deck) => deck.id === deckId) ?? null;
+}
+
+function getStringRouteParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function getDeckIdentity(deck: Deck) {

@@ -21,7 +21,19 @@ export default function RootLayout() {
         <Stack.Screen
           name="index"
           options={{
-            title: 'Deck Workspace',
+            title: 'Decks',
+          }}
+        />
+        <Stack.Screen
+          name="decks/index"
+          options={{
+            title: 'Decks',
+          }}
+        />
+        <Stack.Screen
+          name="decks/[deckId]"
+          options={{
+            title: 'Deck Editor',
           }}
         />
         <Stack.Screen

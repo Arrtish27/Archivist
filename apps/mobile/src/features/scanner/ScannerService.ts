@@ -4,6 +4,7 @@ import {
 } from '@/domain/card-resolution/CardResolver';
 import { OcrCardText, ScanCandidate } from '@/domain/card-resolution/types';
 import { CatalogRepository } from '@/data/catalog/CatalogRepository';
+import { GrandArchiveApiClient } from '@/data/catalog/GrandArchiveApiClient';
 
 import { StillImageOcrResult } from './NativeOcrService';
 import { buildOcrCardText } from './OcrTextExtraction';
@@ -38,6 +39,13 @@ export function createScannerService(resolver: CardResolver): ScannerService {
   };
 }
 
-export function createOfflineScannerService(repository: CatalogRepository) {
-  return createScannerService(new OfflineCardResolver(repository));
+export function createOfflineScannerService(
+  repository: CatalogRepository,
+  apiClient?: Pick<GrandArchiveApiClient, 'fetchAutocomplete'>,
+) {
+  return createScannerService(
+    new OfflineCardResolver(repository, {
+      apiClient,
+    }),
+  );
 }

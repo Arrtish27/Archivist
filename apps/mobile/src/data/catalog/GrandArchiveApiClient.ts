@@ -89,8 +89,7 @@ export class GrandArchiveApiClient {
   constructor(options: GrandArchiveApiClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? syncConfig.apiBaseUrl;
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.userAgent =
-      options.userAgent ?? 'GrandArchiveCompanion/0.1 Phase01CatalogSync';
+    this.userAgent = options.userAgent ?? 'Archivist/0.1 Phase01CatalogSync';
   }
 
   async fetchAllCards() {

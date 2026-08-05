@@ -1,4 +1,7 @@
 import { CatalogRepository } from '@/data/catalog/CatalogRepository';
+import { GrandArchiveApiClient } from '@/data/catalog/GrandArchiveApiClient';
+import { mapGrandArchiveCard } from '@/data/catalog/mapGrandArchiveCard';
+import { CatalogCard } from '@/data/catalog/types';
 import {
   normalizeCollectorNumber,
   normalizeName,
@@ -11,13 +14,20 @@ import { OcrCardText, ScanCandidate } from './types';
 const EXACT_FOOTER_CONFIDENCE = 0.98;
 const EXACT_NAME_CONFIDENCE = 0.9;
 const FUZZY_NAME_CONFIDENCE_FLOOR = 0.62;
+const MAX_SCAN_CANDIDATES = 5;
+const MAX_API_QUERIES = 4;
 
 export type CardResolver = {
   resolveText(text: OcrCardText): Promise<ScanCandidate[]>;
 };
 
 export class OfflineCardResolver implements CardResolver {
-  constructor(private readonly catalogRepository: CatalogRepository) {}
+  constructor(
+    private readonly catalogRepository: CatalogRepository,
+    private readonly options: {
+      apiClient?: Pick<GrandArchiveApiClient, 'fetchAutocomplete'>;
+    } = {},
+  ) {}
 
   async resolveText(text: OcrCardText): Promise<ScanCandidate[]> {
     const exactFooter = await this.resolveFooter(text);
@@ -26,50 +36,45 @@ export class OfflineCardResolver implements CardResolver {
       return [exactFooter];
     }
 
-    const normalizedName = normalizeName(text.nameText);
+    const queries = buildResolverQueries(text);
+    const candidatesByUuid = new Map<string, CandidateAccumulator>();
 
-    if (!normalizedName) {
-      return [];
-    }
+    for (const query of queries) {
+      const exactName = await this.catalogRepository.getCardByNormalizedName(
+        query.normalized,
+      );
 
-    const exactName =
-      await this.catalogRepository.getCardByNormalizedName(normalizedName);
-
-    if (exactName) {
-      return [
-        {
-          cardLevel: parseNullableNumber(exactName.level),
-          cardName: exactName.name,
-          cardTypes: exactName.types,
-          cardUuid: exactName.uuid,
+      if (exactName) {
+        mergeCandidate(candidatesByUuid, exactName, {
           confidence: EXACT_NAME_CONFIDENCE,
-          reason: ['exact_name'],
-          requiresConfirmation: true,
-        },
-      ];
+          reasons: ['exact_name', ...query.reasons],
+          query: query.normalized,
+        });
+      }
+
+      const searchMatches = await this.findFuzzyCandidates(query.normalized);
+
+      for (const match of searchMatches) {
+        const score = scoreNameMatch(query.normalized, match.normalizedName);
+
+        if (score < FUZZY_NAME_CONFIDENCE_FLOOR) {
+          continue;
+        }
+
+        mergeCandidate(candidatesByUuid, match, {
+          confidence: score,
+          reasons: ['fuzzy_name', 'search_fallback', ...query.reasons],
+          query: query.normalized,
+        });
+      }
     }
 
-    const candidates = await this.findFuzzyCandidates(normalizedName);
+    await this.addApiCandidates(queries, candidatesByUuid);
 
-    return candidates
-      .map((candidate) => {
-        const score = scoreNameMatch(normalizedName, candidate.normalizedName);
-
-        return {
-          cardLevel: parseNullableNumber(candidate.level),
-          cardName: candidate.name,
-          cardTypes: candidate.types,
-          cardUuid: candidate.uuid,
-          confidence: score,
-          reason: ['fuzzy_name'],
-          requiresConfirmation: true,
-        };
-      })
-      .filter(
-        (candidate) => candidate.confidence >= FUZZY_NAME_CONFIDENCE_FLOOR,
-      )
+    return [...candidatesByUuid.values()]
+      .map(toScanCandidate)
       .sort((left, right) => right.confidence - left.confidence)
-      .slice(0, 5);
+      .slice(0, MAX_SCAN_CANDIDATES);
   }
 
   private async findFuzzyCandidates(normalizedName: string) {
@@ -127,6 +132,155 @@ export class OfflineCardResolver implements CardResolver {
       setPrefix: match.edition.setPrefix,
     };
   }
+
+  private async addApiCandidates(
+    queries: ResolverQuery[],
+    candidatesByUuid: Map<string, CandidateAccumulator>,
+  ) {
+    const apiClient = this.options.apiClient;
+
+    if (!apiClient) {
+      return;
+    }
+
+    try {
+      for (const query of queries.slice(0, MAX_API_QUERIES)) {
+        const cards = (await apiClient.fetchAutocomplete(query.text)).map(
+          mapGrandArchiveCard,
+        );
+
+        if (cards.length === 0) {
+          continue;
+        }
+
+        await this.catalogRepository.upsertCards(cards);
+
+        for (const card of cards) {
+          const score = Math.max(
+            FUZZY_NAME_CONFIDENCE_FLOOR,
+            scoreNameMatch(query.normalized, card.normalizedName),
+          );
+
+          mergeCandidate(candidatesByUuid, card, {
+            confidence: Math.min(0.89, score),
+            reasons: [
+              'grand_archive_query',
+              'grand_archive_result',
+              ...query.reasons,
+            ],
+            query: query.normalized,
+          });
+        }
+      }
+    } catch {
+      return;
+    }
+  }
+}
+
+type ResolverQuery = {
+  normalized: string;
+  reasons: string[];
+  text: string;
+};
+
+type CandidateAccumulator = {
+  card: CatalogCard;
+  confidence: number;
+  matchedQueries: Set<string>;
+  reasons: Set<string>;
+};
+
+function buildResolverQueries(text: OcrCardText): ResolverQuery[] {
+  const inputs: ResolverQuery[] = [];
+
+  addResolverQuery(inputs, text.nameText, ['ocr_name_candidate']);
+
+  for (const candidate of text.nameCandidates ?? []) {
+    addResolverQuery(inputs, candidate, [
+      candidate.includes(',') ? 'raw_line_candidate' : 'fragment_candidate',
+    ]);
+  }
+
+  const seen = new Set<string>();
+
+  return inputs.filter((query) => {
+    if (seen.has(query.normalized)) {
+      return false;
+    }
+
+    seen.add(query.normalized);
+    return true;
+  });
+}
+
+function addResolverQuery(
+  queries: ResolverQuery[],
+  value: string | null | undefined,
+  reasons: string[],
+) {
+  const normalized = normalizeName(value);
+
+  if (!normalized || normalized.length < 3) {
+    return;
+  }
+
+  queries.push({
+    normalized,
+    reasons,
+    text: String(value).trim(),
+  });
+}
+
+function mergeCandidate(
+  candidatesByUuid: Map<string, CandidateAccumulator>,
+  card: CatalogCard,
+  input: {
+    confidence: number;
+    query: string;
+    reasons: string[];
+  },
+) {
+  const existing = candidatesByUuid.get(card.uuid);
+
+  if (!existing) {
+    candidatesByUuid.set(card.uuid, {
+      card,
+      confidence: input.confidence,
+      matchedQueries: new Set([input.query]),
+      reasons: new Set(input.reasons),
+    });
+    return;
+  }
+
+  existing.card = card;
+  existing.confidence = Math.max(existing.confidence, input.confidence);
+  existing.matchedQueries.add(input.query);
+
+  for (const reason of input.reasons) {
+    existing.reasons.add(reason);
+  }
+}
+
+function toScanCandidate(accumulator: CandidateAccumulator): ScanCandidate {
+  const confidence = Math.min(
+    0.97,
+    accumulator.confidence + (accumulator.matchedQueries.size - 1) * 0.04,
+  );
+  const edition = accumulator.card.editions[0];
+
+  return {
+    cardLevel: parseNullableNumber(accumulator.card.level),
+    cardName: accumulator.card.name,
+    cardTypes: accumulator.card.types,
+    cardUuid: accumulator.card.uuid,
+    collectorNumber: edition?.collectorNumber,
+    confidence,
+    editionUuid: edition?.uuid,
+    reason: [...accumulator.reasons],
+    requiresConfirmation: true,
+    setPrefix: edition?.setPrefix,
+  };
 }
 
 export function parseEditionFooter(text: OcrCardText) {

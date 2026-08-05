@@ -1,22 +1,22 @@
 {
   "expo": {
-    "name": "Grand Archive Companion",
+    "name": "Archivist",
     "slug": "archivist-grand-archive",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "grandarchivecompanion",
+    "scheme": "archivist",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.publisher.grandarchivecompanion",
+      "bundleIdentifier": "com.publisher.archivist",
       "buildNumber": "1",
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "Grand Archive Companion uses the camera to scan cards into decklists."
+        "NSCameraUsageDescription": "Archivist uses the camera to scan cards into decklists."
       }
     },
     "android": {
-      "package": "com.publisher.grandarchivecompanion",
+      "package": "com.publisher.archivist",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -36,7 +36,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Grand Archive Companion uses the camera to scan cards into decklists.",
+          "cameraPermission": "Archivist uses the camera to scan cards into decklists.",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
         }

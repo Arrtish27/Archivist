@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -17,7 +17,9 @@ import { useAppServices } from '@/application/AppServicesProvider';
 import { CatalogCard } from '@/data/catalog/types';
 import { ScanCandidate } from '@/domain/card-resolution/types';
 import { DeckSection } from '@/domain/validation/types';
+import { DEFAULT_DECK_SECTION } from '@/features/deck-builder/DeckBuilderModel';
 import { StillImageOcrResult } from '@/features/scanner/NativeOcrService';
+import { getScannerCaptureDelayMs } from '@/features/scanner/ScannerCaptureLoop';
 import {
   createScannerDeckWorkflow,
   ScannerDeckAddResult,
@@ -72,12 +74,29 @@ export function ScannerMvpScreen() {
   const scannerSessionRef = useRef(createScannerSession());
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
-  const [targetSection, setTargetSection] = useState<DeckSection>(
-    requestedSection ?? 'main',
+  const routeDefaultSection = requestedSection ?? DEFAULT_DECK_SECTION;
+  const [sectionSelection, setSectionSelection] = useState<{
+    routeSection: DeckSection | null;
+    section: DeckSection;
+  }>(() => ({
+    routeSection: requestedSection,
+    section: routeDefaultSection,
+  }));
+  const targetSection =
+    sectionSelection.routeSection === requestedSection
+      ? sectionSelection.section
+      : routeDefaultSection;
+  const setTargetSection = useCallback(
+    (section: DeckSection) =>
+      setSectionSelection({
+        routeSection: requestedSection,
+        section,
+      }),
+    [requestedSection],
   );
   const [quantity, setQuantity] = useState(1);
   const [scannerMode, setScannerMode] = useState<ScannerMode>('deck');
-  const [batchRunning, setBatchRunning] = useState(false);
+  const [autoCapturePaused, setAutoCapturePaused] = useState(false);
   const [captureState, setCaptureState] = useState<CaptureState>({
     status: 'idle',
   });
@@ -163,6 +182,9 @@ export function ScannerMvpScreen() {
         setLastAdd(result);
         setRecentAdds((current) => [result, ...current].slice(0, 6));
         await refreshDecks();
+        if (source === 'scanner_confirmation') {
+          setCaptureState({ status: 'idle' });
+        }
       } finally {
         setDeckWriteState('idle');
       }
@@ -285,27 +307,33 @@ export function ScannerMvpScreen() {
   );
 
   useEffect(() => {
-    if (
-      !batchRunning ||
-      !cameraReady ||
-      !activeDeck ||
-      captureState.status === 'capturing' ||
-      deckWriteState !== 'idle'
-    ) {
+    const delayMs = getScannerCaptureDelayMs({
+      cameraReady,
+      captureStatus: captureState.status,
+      decisionStatus:
+        captureState.status === 'complete'
+          ? captureState.decision.status
+          : undefined,
+      deckWriteState,
+      hasActiveDeck: Boolean(activeDeck),
+      paused: autoCapturePaused,
+    });
+
+    if (delayMs === null) {
       return;
     }
 
     const timer = setTimeout(() => {
       void captureAndRecognize('batch');
-    }, 900);
+    }, delayMs);
 
     return () => clearTimeout(timer);
   }, [
     activeDeck,
-    batchRunning,
+    autoCapturePaused,
     cameraReady,
     captureAndRecognize,
-    captureState.status,
+    captureState,
     deckWriteState,
   ]);
 
@@ -340,7 +368,16 @@ export function ScannerMvpScreen() {
         </Text>
       </View>
 
-      {!activeDeck ? (
+      {!activeDeck && requestedDeckId ? (
+        <Pressable
+          onPress={() => router.replace('/decks')}
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>Deck List</Text>
+        </Pressable>
+      ) : null}
+
+      {!activeDeck && !requestedDeckId ? (
         <Pressable
           disabled={createDeckMutation.isPending}
           onPress={() => createDeckMutation.mutate()}
@@ -366,7 +403,7 @@ export function ScannerMvpScreen() {
         </View>
         <View style={styles.cameraStatus}>
           <Text style={styles.cameraStatusText}>
-            {batchRunning ? 'Batch' : 'Single'}
+            {autoCapturePaused ? 'Paused' : getScannerStateLabel(captureState)}
           </Text>
         </View>
       </View>
@@ -379,6 +416,22 @@ export function ScannerMvpScreen() {
         <QuantityStepper onChange={setQuantity} value={quantity} />
         <View style={styles.captureRow}>
           <Pressable
+            disabled={!cameraReady || !activeDeck}
+            onPress={() => {
+              setScannerMode('batch');
+              setAutoCapturePaused((value) => !value);
+            }}
+            style={[
+              styles.primaryButton,
+              !autoCapturePaused && styles.primaryButtonActive,
+              (!cameraReady || !activeDeck) && styles.disabled,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>
+              {autoCapturePaused ? 'Resume Auto' : 'Pause Auto'}
+            </Text>
+          </Pressable>
+          <Pressable
             disabled={
               !cameraReady || !activeDeck || captureState.status === 'capturing'
             }
@@ -387,36 +440,15 @@ export function ScannerMvpScreen() {
               void captureAndRecognize('deck');
             }}
             style={[
-              styles.primaryButton,
+              styles.secondaryButton,
               (!cameraReady ||
                 !activeDeck ||
                 captureState.status === 'capturing') &&
                 styles.disabled,
             ]}
           >
-            <Text style={styles.primaryButtonText}>
-              {captureState.status === 'capturing' ? 'Reading' : 'Scan Card'}
-            </Text>
-          </Pressable>
-          <Pressable
-            disabled={!cameraReady || !activeDeck}
-            onPress={() => {
-              setScannerMode('batch');
-              setBatchRunning((value) => !value);
-            }}
-            style={[
-              styles.secondaryButton,
-              batchRunning && styles.secondaryButtonActive,
-              (!cameraReady || !activeDeck) && styles.disabled,
-            ]}
-          >
-            <Text
-              style={[
-                styles.secondaryButtonText,
-                batchRunning && styles.secondaryButtonTextActive,
-              ]}
-            >
-              {batchRunning ? 'Stop Batch' : 'Start Batch'}
+            <Text style={styles.secondaryButtonText}>
+              {captureState.status === 'capturing' ? 'Reading' : 'Scan Now'}
             </Text>
           </Pressable>
         </View>
@@ -438,6 +470,7 @@ export function ScannerMvpScreen() {
         captureState={captureState}
         deckWriteState={deckWriteState}
         onAddCandidate={addCandidateToDeck}
+        onClearDecision={() => setCaptureState({ status: 'idle' })}
         quantity={quantity}
       />
 
@@ -539,6 +572,7 @@ function DecisionPanel({
   captureState,
   deckWriteState,
   onAddCandidate,
+  onClearDecision,
   quantity,
 }: {
   captureState: CaptureState;
@@ -548,6 +582,7 @@ function DecisionPanel({
     quantity: number,
     source: ScannerDeckAddSource,
   ) => Promise<void>;
+  onClearDecision: () => void;
   quantity: number;
 }) {
   if (captureState.status === 'idle') {
@@ -609,31 +644,40 @@ function DecisionPanel({
         </View>
       ) : null}
       {decision.status === 'needs_confirmation' ? (
-        <View style={styles.candidateList}>
-          {decision.candidates.map((candidate) => (
-            <View key={candidate.cardUuid} style={styles.candidateRow}>
-              <CandidateSummary candidate={candidate} />
-              <Pressable
-                disabled={deckWriteState !== 'idle'}
-                onPress={() =>
-                  onAddCandidate(candidate, quantity, 'scanner_confirmation')
-                }
-                style={[
-                  styles.compactButton,
-                  deckWriteState !== 'idle' && styles.disabled,
-                ]}
-              >
-                <Text style={styles.compactButtonText}>Confirm</Text>
-              </Pressable>
-            </View>
-          ))}
-        </View>
+        <>
+          <View style={styles.candidateList}>
+            {decision.candidates.map((candidate) => (
+              <View key={candidate.cardUuid} style={styles.candidateRow}>
+                <CandidateSummary candidate={candidate} />
+                <Pressable
+                  disabled={deckWriteState !== 'idle'}
+                  onPress={() =>
+                    onAddCandidate(candidate, quantity, 'scanner_confirmation')
+                  }
+                  style={[
+                    styles.compactButton,
+                    deckWriteState !== 'idle' && styles.disabled,
+                  ]}
+                >
+                  <Text style={styles.compactButtonText}>Confirm</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+          <CandidateAddButton
+            disabled={deckWriteState !== 'idle'}
+            label="Skip"
+            onPress={onClearDecision}
+          />
+        </>
       ) : null}
       {decision.status === 'no_match' ? (
         <Text style={styles.panelText}>Use local search below.</Text>
       ) : null}
       {decision.status === 'duplicate_ignored' ? (
-        <Text style={styles.panelText}>Card already added from this view.</Text>
+        <Text style={styles.panelText}>
+          Move card away before scanning it again.
+        </Text>
       ) : null}
     </View>
   );
@@ -770,9 +814,16 @@ function ScannerDebugPanel({
     <View style={styles.panel}>
       <Text style={styles.panelTitle}>Scanner Logs</Text>
       {state.status === 'complete' ? (
-        <Text style={styles.ocrText}>
-          {state.ocr.rawText || 'No OCR text.'}
-        </Text>
+        <>
+          <Text style={styles.ocrText}>
+            {state.ocr.rawText || 'No OCR text.'}
+          </Text>
+          {state.resolution.ocrText.nameCandidates?.length ? (
+            <Text style={styles.panelMeta}>
+              Queries: {state.resolution.ocrText.nameCandidates.join(' | ')}
+            </Text>
+          ) : null}
+        </>
       ) : null}
       {eventLog.length === 0 ? (
         <Text style={styles.panelText}>No scan events.</Text>
@@ -837,7 +888,7 @@ function formatDecisionStatus(decision: ScannerDecision) {
     case 'card_seen_hold_steady':
       return 'Hold Steady';
     case 'duplicate_ignored':
-      return 'Duplicate Ignored';
+      return 'Move Card Away';
     case 'matched':
       return 'Matched';
     case 'needs_confirmation':
@@ -853,6 +904,22 @@ function formatDecisionStatus(decision: ScannerDecision) {
     case 'too_dark':
       return 'Too Dark';
   }
+}
+
+function getScannerStateLabel(captureState: CaptureState) {
+  if (captureState.status === 'capturing') {
+    return 'Reading';
+  }
+
+  if (captureState.status === 'idle') {
+    return 'Looking';
+  }
+
+  if (captureState.status === 'failed') {
+    return 'Scanner Error';
+  }
+
+  return formatDecisionStatus(captureState.decision);
 }
 
 function formatSection(section: DeckSection) {
@@ -1042,6 +1109,9 @@ const styles = StyleSheet.create({
     color: theme.colors.surface,
     fontSize: 15,
     fontWeight: '800',
+  },
+  primaryButtonActive: {
+    backgroundColor: theme.colors.text,
   },
   recentAddRow: {
     borderTopColor: theme.colors.border,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildOcrCardText } from './OcrTextExtraction';
+import { buildOcrCardText, buildOcrNameCandidates } from './OcrTextExtraction';
 
 describe('buildOcrCardText', () => {
   it('extracts likely name and footer text from framed OCR lines', () => {
@@ -30,6 +30,25 @@ describe('buildOcrCardText', () => {
         nameText: 'Apotheosis Rite',
         setPrefixText: 'P24',
       }),
+    );
+  });
+
+  it('turns polluted OCR title lines into searchable name candidates', () => {
+    expect(
+      buildOcrNameCandidates([
+        "Lv.3o ja, Heaven's Favored",
+        'THERING',
+        'COST',
+        'Champion',
+        'Tamer Human',
+        'Guo Jia Lineage',
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        "ja, Heaven's Favored",
+        "Heaven's Favored",
+        'Guo Jia',
+      ]),
     );
   });
 });

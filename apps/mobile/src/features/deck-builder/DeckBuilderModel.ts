@@ -48,6 +48,8 @@ export const deckSectionOrder: DeckSection[] = [
   'sideboard',
 ];
 
+export const DEFAULT_DECK_SECTION: DeckSection = 'material';
+
 export const deckSectionMetadata: {
   section: DeckSection;
   shortTitle: string;
